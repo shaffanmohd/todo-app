@@ -1,9 +1,30 @@
-import { Schema, model, models } from "mongoose";
+import mongoose, { Schema, model, models, Document, Types } from "mongoose";
 import {
   TODO_STATUS,
   TODO_PRIORITY,
   RECURRENCE_FREQUENCY,
 } from "@/lib/constants";
+import type {
+  TodoStatus,
+  TodoPriority,
+  RecurrenceFrequency,
+} from "@/lib/constants";
+
+export interface ITodo extends Document {
+  name: string;
+  description: string;
+  dueDate?: Date;
+  status: TodoStatus;
+  priority: TodoPriority;
+  dependsOn: Types.ObjectId[];
+  recurrence: {
+    frequency: RecurrenceFrequency;
+    intervalDays?: number;
+  };
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 const RecurrenceSchema = new Schema(
   {
@@ -17,7 +38,7 @@ const RecurrenceSchema = new Schema(
   { _id: false },
 );
 
-const TodoSchema = new Schema(
+const TodoSchema = new Schema<ITodo>(
   {
     name: { type: String, required: true, trim: true },
     description: { type: String, default: "" },
@@ -47,4 +68,5 @@ TodoSchema.index({ priority: 1 });
 TodoSchema.index({ dueDate: 1 });
 TodoSchema.index({ deletedAt: 1 });
 
-export const Todo = models.Todo || model("Todo", TodoSchema);
+export const Todo =
+  (models.Todo as mongoose.Model<ITodo>) || model<ITodo>("Todo", TodoSchema);

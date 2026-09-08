@@ -6,6 +6,13 @@ export const TODO_STATUS = [
 ] as const;
 export type TodoStatus = (typeof TODO_STATUS)[number];
 
+export const TODO_STATUS_VALUES = {
+  NOT_STARTED: TODO_STATUS[0],
+  IN_PROGRESS: TODO_STATUS[1],
+  COMPLETED: TODO_STATUS[2],
+  ARCHIVED: TODO_STATUS[3],
+} as const;
+
 export const TODO_PRIORITY = ["Low", "Medium", "High"] as const;
 export type TodoPriority = (typeof TODO_PRIORITY)[number];
 

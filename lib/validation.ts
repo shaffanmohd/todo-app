@@ -10,8 +10,6 @@ import type {
 } from "@/lib/constants";
 import mongoose from "mongoose";
 
-// Shape of the raw, untrusted request body before validation.
-// Every field is optional/unknown-typed because we can't trust the client.
 export interface TodoInput {
   name?: unknown;
   description?: unknown;
@@ -25,18 +23,10 @@ export interface TodoInput {
   };
 }
 
-export function validateTodoInput(body: unknown): string[] {
+// Shared checks that apply whenever a given field IS present,
+// regardless of whether it's a create or an update.
+function validateProvidedFields(input: TodoInput): string[] {
   const errors: string[] = [];
-
-  if (typeof body !== "object" || body === null) {
-    return ["Request body must be a JSON object"];
-  }
-
-  const input = body as TodoInput;
-
-  if (typeof input.name !== "string" || !input.name.trim()) {
-    errors.push("name is required and must be a non-empty string");
-  }
 
   if (
     input.status !== undefined &&
@@ -83,4 +73,37 @@ export function validateTodoInput(body: unknown): string[] {
   }
 
   return errors;
+}
+
+// Used by POST — name is required.
+export function validateTodoCreate(body: unknown): string[] {
+  if (typeof body !== "object" || body === null) {
+    return ["Request body must be a JSON object"];
+  }
+  const input = body as TodoInput;
+  const errors: string[] = [];
+
+  if (typeof input.name !== "string" || !input.name.trim()) {
+    errors.push("name is required and must be a non-empty string");
+  }
+
+  return [...errors, ...validateProvidedFields(input)];
+}
+
+// Used by PATCH — every field optional, but name (if provided) can't be blank.
+export function validateTodoUpdate(body: unknown): string[] {
+  if (typeof body !== "object" || body === null) {
+    return ["Request body must be a JSON object"];
+  }
+  const input = body as TodoInput;
+  const errors: string[] = [];
+
+  if (
+    input.name !== undefined &&
+    (typeof input.name !== "string" || !input.name.trim())
+  ) {
+    errors.push("name must be a non-empty string");
+  }
+
+  return [...errors, ...validateProvidedFields(input)];
 }

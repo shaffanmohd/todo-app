@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDb } from "@/lib/db";
-import { Todo } from "@/lib/models/Todo";
-import { validateTodoInput, type TodoInput } from "@/lib/validation";
+import { ITodo, Todo } from "@/lib/models/Todo";
+import { validateTodoCreate, type TodoInput } from "@/lib/validation";
+import {
+  TODO_PRIORITY,
+  TODO_STATUS,
+  TodoPriority,
+  TodoStatus,
+} from "@/lib/constants";
 
 const VALID_SORT_FIELDS = [
   "dueDate",
@@ -18,24 +24,31 @@ function isSortField(value: string): value is SortField {
 
 interface TodoFilter {
   deletedAt: null;
-  status?: string;
-  priority?: string;
+  status?: TodoStatus;
+  priority?: TodoPriority;
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   await connectDb();
 
   const { searchParams } = new URL(req.url);
-  const status = searchParams.get("status");
-  const priority = searchParams.get("priority");
+  const statusParam = searchParams.get("status");
+  const priorityParam = searchParams.get("priority");
   const sortParam = searchParams.get("sort") ?? "createdAt";
   const order: 1 | -1 = searchParams.get("order") === "asc" ? 1 : -1;
   const page = parseInt(searchParams.get("page") ?? "1", 10);
   const limit = parseInt(searchParams.get("limit") ?? "50", 10);
 
   const filter: TodoFilter = { deletedAt: null };
-  if (status) filter.status = status;
-  if (priority) filter.priority = priority;
+  if (statusParam && (TODO_STATUS as readonly string[]).includes(statusParam)) {
+    filter.status = statusParam as TodoStatus;
+  }
+  if (
+    priorityParam &&
+    (TODO_PRIORITY as readonly string[]).includes(priorityParam)
+  ) {
+    filter.priority = priorityParam as TodoPriority;
+  }
 
   const sortField: SortField = isSortField(sortParam) ? sortParam : "createdAt";
 
@@ -63,7 +76,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const errors = validateTodoInput(body);
+  const errors = validateTodoCreate(body);
   if (errors.length > 0) {
     return NextResponse.json(
       { error: "Validation failed", details: errors },
@@ -87,8 +100,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  const todoData: Partial<ITodo> = {
+    name: input.name as string,
+    description: (input.description as string | undefined) ?? "",
+    dueDate: input.dueDate ? new Date(input.dueDate as string) : undefined,
+    status: input.status as ITodo["status"] | undefined,
+    priority: input.priority as ITodo["priority"] | undefined,
+    dependsOn: dependsOn as unknown as ITodo["dependsOn"],
+    recurrence: input.recurrence as ITodo["recurrence"] | undefined,
+  };
+
   try {
-    const todo = await Todo.create(input);
+    const todo = await Todo.create(todoData);
     return NextResponse.json({ data: todo }, { status: 201 });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
