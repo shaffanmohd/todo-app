@@ -37,8 +37,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const sortParam = searchParams.get("sort") ?? "createdAt";
   const order: 1 | -1 = searchParams.get("order") === "asc" ? 1 : -1;
   const page = parseInt(searchParams.get("page") ?? "1", 10);
-  const limit = parseInt(searchParams.get("limit") ?? "50", 10);
-
+  const rawLimit = parseInt(searchParams.get("limit") ?? "50", 10);
+  const limit = Math.min(Math.max(rawLimit, 1), 100);
   const filter: TodoFilter = { deletedAt: null };
   if (statusParam && (TODO_STATUS as readonly string[]).includes(statusParam)) {
     filter.status = statusParam as TodoStatus;
