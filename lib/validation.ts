@@ -45,6 +45,13 @@ function validateProvidedFields(input: TodoInput): string[] {
   if (input.dueDate !== undefined) {
     if (typeof input.dueDate !== "string" || isNaN(Date.parse(input.dueDate))) {
       errors.push("dueDate must be a valid date string");
+    } else {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const parsedDate = new Date(input.dueDate);
+      if (parsedDate < today) {
+        errors.push("dueDate cannot be in the past");
+      }
     }
   }
 

@@ -93,6 +93,16 @@ export default function TodoForm({
       return;
     }
 
+    if (dueDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const selectedDate = new Date(dueDate);
+      if (selectedDate < today) {
+        setError("Due date cannot be in the past");
+        return;
+      }
+    }
+
     if (recurrenceFrequency !== "none" && dependsOn.length > 0) {
       setError("A todo with dependencies cannot be set to recur");
       return;
@@ -123,7 +133,6 @@ export default function TodoForm({
       setSubmitting(false);
     }
   }
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
@@ -158,6 +167,7 @@ export default function TodoForm({
           <Input
             id="dueDate"
             type="date"
+            min={new Date().toISOString().slice(0, 10)}
             value={dueDate ? dueDate.slice(0, 10) : ""}
             onChange={(e) => setDueDate(e.target.value)}
           />

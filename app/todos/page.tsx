@@ -94,6 +94,7 @@ export default function TodosPage() {
   const [editTodo, setEditTodo] = useState<ITodo | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ITodo | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadTodos = useCallback(async () => {
     setLoading(true);
@@ -137,16 +138,23 @@ export default function TodosPage() {
   async function confirmDelete() {
     if (!deleteTarget) return;
     setDeleteError(null);
+    setDeleting(true);
     try {
       await deleteTodo(deleteTarget._id.toString());
-      setDeleteTarget(null);
+      setDeleteTarget(null); // only close on success
       await loadTodos();
     } catch (err) {
       setDeleteError(
         err instanceof Error ? err.message : "Failed to delete todo",
       );
-      setDeleteTarget(null);
+      // deliberately NOT closing the dialog here, so the error shows in context
+    } finally {
+      setDeleting(false);
     }
+  }
+  function openDeleteDialog(todo: ITodo) {
+    setDeleteError(null);
+    setDeleteTarget(todo);
   }
 
   function toggleSort(field: SortableField) {
@@ -178,9 +186,6 @@ export default function TodosPage() {
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
-        {deleteError && (
-          <p className="text-sm text-destructive">{deleteError}</p>
-        )}
 
         {/* Main card */}
         <Card>
@@ -358,7 +363,7 @@ export default function TodosPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             variant="destructive"
-                            onClick={() => setDeleteTarget(todo)}
+                            onClick={() => openDeleteDialog(todo)}
                           >
                             Delete
                           </DropdownMenuItem>
@@ -467,7 +472,12 @@ export default function TodosPage() {
         {/* Delete confirmation */}
         <AlertDialog
           open={!!deleteTarget}
-          onOpenChange={(open) => !open && setDeleteTarget(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDeleteTarget(null);
+              setDeleteError(null);
+            }
+          }}
         >
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -479,13 +489,26 @@ export default function TodosPage() {
                 deletion will be blocked.
               </AlertDialogDescription>
             </AlertDialogHeader>
+
+            {deleteError && (
+              <p className="text-sm text-destructive bg-destructive/10 rounded px-3 py-2">
+                {deleteError}
+              </p>
+            )}
+
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel onClick={() => setDeleteError(null)}>
+                Cancel
+              </AlertDialogCancel>
               <AlertDialogAction
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={confirmDelete}
+                onClick={(e) => {
+                  e.preventDefault(); // prevent default auto-close behavior so we can control it ourselves
+                  confirmDelete();
+                }}
+                disabled={deleting}
               >
-                Delete
+                {deleting ? "Deleting..." : "Delete"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
