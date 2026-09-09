@@ -2,12 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDb } from "@/lib/db";
 import { ITodo, Todo } from "@/lib/models/Todo";
 import { validateTodoCreate, type TodoInput } from "@/lib/validation";
-import {
-  TODO_PRIORITY,
-  TODO_STATUS,
-  TodoPriority,
-  TodoStatus,
-} from "@/lib/constants";
+import { TODO_PRIORITY, TODO_STATUS } from "@/lib/constants";
 
 const VALID_SORT_FIELDS = [
   "dueDate",
@@ -22,32 +17,49 @@ function isSortField(value: string): value is SortField {
   return (VALID_SORT_FIELDS as readonly string[]).includes(value);
 }
 
-interface TodoFilter {
-  deletedAt: null;
-  status?: TodoStatus;
-  priority?: TodoPriority;
-}
-
 export async function GET(req: NextRequest): Promise<NextResponse> {
   await connectDb();
 
   const { searchParams } = new URL(req.url);
   const statusParam = searchParams.get("status");
   const priorityParam = searchParams.get("priority");
+  const dueDateParam = searchParams.get("dueDateStatus");
+  const dependencyParam = searchParams.get("dependencyType");
   const sortParam = searchParams.get("sort") ?? "createdAt";
   const order: 1 | -1 = searchParams.get("order") === "asc" ? 1 : -1;
   const page = parseInt(searchParams.get("page") ?? "1", 10);
   const rawLimit = parseInt(searchParams.get("limit") ?? "50", 10);
   const limit = Math.min(Math.max(rawLimit, 1), 100);
-  const filter: TodoFilter = { deletedAt: null };
+
+  // Build as a plain, loosely-typed Mongo filter object since we may need
+  // $or, which doesn't fit cleanly into a narrow TodoFilter interface.
+  const filter: Record<string, unknown> = { deletedAt: null };
+
   if (statusParam && (TODO_STATUS as readonly string[]).includes(statusParam)) {
-    filter.status = statusParam as TodoStatus;
+    filter.status = statusParam;
   }
   if (
     priorityParam &&
     (TODO_PRIORITY as readonly string[]).includes(priorityParam)
   ) {
-    filter.priority = priorityParam as TodoPriority;
+    filter.priority = priorityParam;
+  }
+  if (dependencyParam === "none") {
+    filter.dependsOn = { $size: 0 };
+  }
+
+  if (dueDateParam === "overdue") {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    filter.dueDate = { $lt: startOfToday };
+  } else if (dueDateParam === "upcoming") {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    filter.$or = [
+      { dueDate: { $gte: startOfToday } },
+      { dueDate: { $exists: false } },
+      { dueDate: null },
+    ];
   }
 
   const sortField: SortField = isSortField(sortParam) ? sortParam : "createdAt";

@@ -1,10 +1,21 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { MoreHorizontal } from "lucide-react";
-import { TODO_STATUS, TODO_PRIORITY } from "@/lib/constants";
-import type { TodoStatus, TodoPriority } from "@/lib/constants";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Loader2,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUpDown,
+  MoreHorizontal,
+} from "lucide-react";
+import {
+  TODO_STATUS,
+  TODO_PRIORITY,
+  STATUS_STYLES,
+  PRIORITY_BAR_COLORS,
+} from "@/lib/constants";
 import {
   getTodos,
   createTodo,
@@ -58,117 +69,144 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import TodoForm from "../components/TodoForm";
 
 type SortableField = "dueDate" | "priority" | "status" | "name" | "createdAt";
 
-const STATUS_STYLES: Record<TodoStatus, string> = {
-  "Not Started": "bg-muted text-muted-foreground",
-  "In Progress": "bg-blue-100 text-blue-700",
-  Completed: "bg-green-100 text-green-700",
-  Archived: "bg-secondary text-secondary-foreground",
-};
-
-const PRIORITY_BAR_COLORS: Record<TodoPriority, string> = {
-  Low: "bg-emerald-400",
-  Medium: "bg-amber-400",
-  High: "bg-red-500",
-};
+function getSortIcon(
+  field: SortableField,
+  sort: SortableField | null,
+  order: "asc" | "desc",
+) {
+  if (sort !== field) {
+    return (
+      <ChevronsUpDown className="inline h-3.5 w-3.5 ml-1 text-muted-foreground/50" />
+    );
+  }
+  return order === "asc" ? (
+    <ArrowUp className="inline h-3.5 w-3.5 ml-1 text-foreground" />
+  ) : (
+    <ArrowDown className="inline h-3.5 w-3.5 ml-1 text-foreground" />
+  );
+}
 
 export default function TodosPage() {
-  const [todos, setTodos] = useState<ITodo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
-  const [limit, setLimit] = useState(25);
-  const [sort, setSort] = useState<SortableField>("createdAt");
-  const [order, setOrder] = useState<"asc" | "desc">("desc");
+  const [dueDateFilter, setDueDateFilter] = useState<string>("all");
+  const [dependencyFilter, setDependencyFilter] = useState<string>("all");
+  const [sort, setSort] = useState<SortableField | null>(null);
+  const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [limit, setLimit] = useState(25);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTodo, setEditTodo] = useState<ITodo | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ITodo | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
-  const loadTodos = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await getTodos({
+  // --- Query: fetch todos, keyed on every param that affects the result ---
+  const queryKey = [
+    "todos",
+    {
+      statusFilter,
+      priorityFilter,
+      dueDateFilter,
+      dependencyFilter,
+      sort,
+      order,
+      page,
+      limit,
+    },
+  ];
+
+  const { data, isLoading, isFetching, error } = useQuery({
+    queryKey,
+    queryFn: () =>
+      getTodos({
         status: statusFilter !== "all" ? statusFilter : undefined,
         priority: priorityFilter !== "all" ? priorityFilter : undefined,
-        sort,
-        order,
+        dueDateStatus: dueDateFilter !== "all" ? dueDateFilter : undefined,
+        dependencyType:
+          dependencyFilter !== "all" ? dependencyFilter : undefined,
+        sort: sort ?? undefined,
+        order: sort ? order : undefined,
         page,
         limit,
-      });
-      setTodos(res.data);
-      setTotalPages(res.pagination.totalPages);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load todos");
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter, priorityFilter, sort, order, page, limit]);
+      }),
+  });
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount/filter-change pattern
-    loadTodos();
-  }, [loadTodos]);
+  const todos = data?.data ?? [];
+  const totalPages = data?.pagination.totalPages ?? 1;
+
+  // --- Mutations: create, update, delete ---
+  const createMutation = useMutation({
+    mutationFn: createTodo,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      setCreateOpen(false);
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({
+      id,
+      values,
+    }: {
+      id: string;
+      values: Partial<TodoFormValues>;
+    }) => updateTodo(id, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      setEditTodo(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteTodo,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      setDeleteTarget(null);
+      setDeleteError(null);
+    },
+    onError: (err: unknown) => {
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete todo",
+      );
+    },
+  });
 
   async function handleCreate(values: TodoFormValues) {
-    await createTodo(values);
-    setCreateOpen(false);
-    await loadTodos();
+    await createMutation.mutateAsync(values);
   }
 
   async function handleEdit(values: TodoFormValues) {
     if (!editTodo) return;
-    await updateTodo(editTodo._id.toString(), values);
-    setEditTodo(null);
-    await loadTodos();
+    await updateMutation.mutateAsync({ id: editTodo._id.toString(), values });
   }
 
-  async function confirmDelete() {
-    if (!deleteTarget) return;
-    setDeleteError(null);
-    setDeleting(true);
-    try {
-      await deleteTodo(deleteTarget._id.toString());
-      setDeleteTarget(null); // only close on success
-      await loadTodos();
-    } catch (err) {
-      setDeleteError(
-        err instanceof Error ? err.message : "Failed to delete todo",
-      );
-      // deliberately NOT closing the dialog here, so the error shows in context
-    } finally {
-      setDeleting(false);
-    }
-  }
   function openDeleteDialog(todo: ITodo) {
     setDeleteError(null);
     setDeleteTarget(todo);
   }
 
-  function toggleSort(field: SortableField) {
-    if (sort === field) {
-      setOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSort(field);
-      setOrder("asc");
-    }
+  function confirmDelete() {
+    if (!deleteTarget) return;
+    deleteMutation.mutate(deleteTarget._id.toString());
   }
 
-  function sortIndicator(field: SortableField) {
-    if (sort !== field) return null;
-    return order === "asc" ? "▲" : "▼";
+  function toggleSort(field: SortableField) {
+    if (sort !== field) {
+      setSort(field);
+      setOrder("asc");
+    } else if (order === "asc") {
+      setOrder("desc");
+    } else {
+      setSort(null);
+    }
   }
 
   return (
@@ -185,13 +223,21 @@ export default function TodosPage() {
           </div>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p className="text-sm text-destructive">
+            {error instanceof Error ? error.message : "Failed to load todos"}
+          </p>
+        )}
 
-        {/* Main card */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">All todos</CardTitle>
-            <div className="flex gap-3 pt-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              All todos
+              {isFetching && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              )}
+            </CardTitle>
+            <div className="flex gap-3 pt-2 flex-wrap">
               <Select
                 value={statusFilter}
                 onValueChange={(v) => {
@@ -201,8 +247,10 @@ export default function TodosPage() {
                   }
                 }}
               >
-                <SelectTrigger className="w-40 rounded-full">
-                  <SelectValue placeholder="All statuses" />
+                <SelectTrigger className="w-44 rounded-full">
+                  <span>
+                    Status: {statusFilter === "all" ? "All" : statusFilter}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All statuses</SelectItem>
@@ -227,8 +275,11 @@ export default function TodosPage() {
                   }
                 }}
               >
-                <SelectTrigger className="w-40 rounded-full">
-                  <SelectValue placeholder="All priorities" />
+                <SelectTrigger className="w-44 rounded-full">
+                  <span>
+                    Priority:{" "}
+                    {priorityFilter === "all" ? "All" : priorityFilter}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All priorities</SelectItem>
@@ -244,6 +295,52 @@ export default function TodosPage() {
                   ))}
                 </SelectContent>
               </Select>
+
+              <Select
+                value={dueDateFilter}
+                onValueChange={(v) => {
+                  if (v) {
+                    setDueDateFilter(v);
+                    setPage(1);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-52 rounded-full">
+                  <span>
+                    Due date:{" "}
+                    {dueDateFilter === "all"
+                      ? "All"
+                      : dueDateFilter === "overdue"
+                        ? "Passed"
+                        : "Not passed"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All due dates</SelectItem>
+                  <SelectItem value="overdue">Passed due date</SelectItem>
+                  <SelectItem value="upcoming">Not passed due date</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={dependencyFilter}
+                onValueChange={(v) => {
+                  if (v) {
+                    setDependencyFilter(v);
+                    setPage(1);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-52 rounded-full">
+                  <span>
+                    Dependency: {dependencyFilter === "all" ? "All" : "None"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All todos</SelectItem>
+                  <SelectItem value="none">No dependencies</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardHeader>
 
@@ -252,40 +349,40 @@ export default function TodosPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead
-                    className="cursor-pointer text-muted-foreground"
+                    className="cursor-pointer select-none text-muted-foreground"
                     onClick={() => toggleSort("name")}
                   >
-                    Name {sortIndicator("name")}
+                    Name {getSortIcon("name", sort, order)}
                   </TableHead>
                   <TableHead
-                    className="cursor-pointer text-muted-foreground"
+                    className="cursor-pointer select-none text-muted-foreground"
                     onClick={() => toggleSort("status")}
                   >
-                    Status {sortIndicator("status")}
+                    Status {getSortIcon("status", sort, order)}
                   </TableHead>
                   <TableHead
-                    className="cursor-pointer text-muted-foreground"
+                    className="cursor-pointer select-none text-muted-foreground"
                     onClick={() => toggleSort("priority")}
                   >
-                    Priority {sortIndicator("priority")}
+                    Priority {getSortIcon("priority", sort, order)}
                   </TableHead>
                   <TableHead
-                    className="cursor-pointer text-muted-foreground"
+                    className="cursor-pointer select-none text-muted-foreground"
                     onClick={() => toggleSort("dueDate")}
                   >
-                    Due Date {sortIndicator("dueDate")}
+                    Due Date {getSortIcon("dueDate", sort, order)}
                   </TableHead>
                   <TableHead
-                    className="cursor-pointer text-muted-foreground"
+                    className="cursor-pointer select-none text-muted-foreground"
                     onClick={() => toggleSort("createdAt")}
                   >
-                    Created {sortIndicator("createdAt")}
+                    Created {getSortIcon("createdAt", sort, order)}
                   </TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading && (
+                {isLoading && (
                   <TableRow>
                     <TableCell
                       colSpan={6}
@@ -295,7 +392,7 @@ export default function TodosPage() {
                     </TableCell>
                   </TableRow>
                 )}
-                {!loading && todos.length === 0 && (
+                {!isLoading && todos.length === 0 && (
                   <TableRow>
                     <TableCell
                       colSpan={6}
@@ -305,73 +402,74 @@ export default function TodosPage() {
                     </TableCell>
                   </TableRow>
                 )}
-                {todos.map((todo) => (
-                  <TableRow key={todo._id.toString()}>
-                    <TableCell>
-                      <Link
-                        href={`/todos/${todo._id}`}
-                        className="text-primary hover:underline font-medium"
-                      >
-                        {todo.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={STATUS_STYLES[todo.status]}
-                        variant="secondary"
-                      >
-                        {todo.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-block w-1.5 h-4 rounded-full ${PRIORITY_BAR_COLORS[todo.priority]}`}
-                        />
-                        <span className="text-muted-foreground">
-                          {todo.priority}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {todo.dueDate
-                        ? new Date(todo.dueDate).toLocaleDateString()
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {new Date(todo.createdAt).toLocaleString(undefined, {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                            />
-                          }
+                {!isLoading &&
+                  todos.map((todo) => (
+                    <TableRow key={todo._id.toString()}>
+                      <TableCell>
+                        <Link
+                          href={`/todos/${todo._id}`}
+                          className="text-primary hover:underline font-medium"
                         >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setEditTodo(todo)}>
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => openDeleteDialog(todo)}
+                          {todo.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className={STATUS_STYLES[todo.status]}
+                          variant="secondary"
+                        >
+                          {todo.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-block w-1.5 h-4 rounded-full ${PRIORITY_BAR_COLORS[todo.priority]}`}
+                          />
+                          <span className="text-muted-foreground">
+                            {todo.priority}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {todo.dueDate
+                          ? new Date(todo.dueDate).toLocaleDateString()
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(todo.createdAt).toLocaleString(undefined, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                              />
+                            }
                           >
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                            <MoreHorizontal className="h-4 w-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setEditTodo(todo)}>
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => openDeleteDialog(todo)}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
               </TableBody>
             </Table>
           </CardContent>
@@ -382,17 +480,17 @@ export default function TodosPage() {
               onValueChange={(v) => {
                 if (v) {
                   setLimit(Number(v));
-                  setPage(1); // reset to page 1 since page count changes with limit
+                  setPage(1);
                 }
               }}
             >
-              <SelectTrigger className="w-32 rounded-full">
+              <SelectTrigger className="w-36 rounded-full">
                 <span>Showing {limit}</span>
               </SelectTrigger>
               <SelectContent>
                 {[10, 25, 50, 100].map((n) => (
                   <SelectItem key={n} value={String(n)}>
-                    {n}
+                    {n} / page
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -503,12 +601,12 @@ export default function TodosPage() {
               <AlertDialogAction
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={(e) => {
-                  e.preventDefault(); // prevent default auto-close behavior so we can control it ourselves
+                  e.preventDefault();
                   confirmDelete();
                 }}
-                disabled={deleting}
+                disabled={deleteMutation.isPending}
               >
-                {deleting ? "Deleting..." : "Delete"}
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

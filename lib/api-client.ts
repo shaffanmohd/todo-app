@@ -24,6 +24,8 @@ export interface ApiError {
 export interface TodoQueryParams {
   status?: string;
   priority?: string;
+  dueDateStatus?: string;
+  dependencyType?: string;
   sort?: string;
   order?: "asc" | "desc";
   page?: number;
