@@ -1,4 +1,5 @@
 import type { ITodo } from "@/lib/models/Todo";
+import { TodoPriority, TodoStatus } from "./constants";
 
 const BASE_URL = "/api/todos";
 
@@ -11,11 +12,6 @@ export interface TodoListResponse {
     totalPages: number;
   };
 }
-
-export interface TodoDetailResponse {
-  data: ITodo & { dependents: ITodo[] };
-}
-
 export interface ApiError {
   error: string;
   details?: string[] | string;
@@ -30,6 +26,23 @@ export interface TodoQueryParams {
   order?: "asc" | "desc";
   page?: number;
   limit?: number;
+}
+
+export interface TodoDetail extends Omit<ITodo, "dependsOn"> {
+  dependsOn: PopulatedTodoRef[];
+  dependents: PopulatedTodoRef[];
+}
+
+export interface TodoDetailResponse {
+  data: TodoDetail;
+}
+
+export interface PopulatedTodoRef {
+  _id: string;
+  name: string;
+  status: TodoStatus;
+  priority: TodoPriority;
+  dueDate?: string | Date | null;
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
