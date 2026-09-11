@@ -51,7 +51,6 @@ export default function TodoDetailPage() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const {data, isLoading, isFetching, error} = useQuery({
     queryKey: ["todo", id],
@@ -74,35 +73,33 @@ export default function TodoDetailPage() {
     mutationFn: () => deleteTodo(id),
     onSuccess: () => {
       queryClient.invalidateQueries({queryKey: ["todos"]});
+      toast.success("Todo deleted.");
       router.push("/todos");
     },
     onError: (err: unknown) => {
-      setDeleteError(
-        err instanceof Error ? err.message : "Failed to delete todo",
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to delete todo");
     },
   });
 
- const statusMutation = useMutation({
-   mutationFn: (newStatus: string) => updateTodo(id, {status: newStatus}),
-   onSuccess: () => {
-     queryClient.invalidateQueries({queryKey: ["todo", id]});
-     queryClient.invalidateQueries({queryKey: ["todos"]});
-     toast.success("Status updated.");
-   },
-   onError: (err: unknown) => {
-     toast.error(
-       err instanceof Error ? err.message : "Failed to update status",
-     );
-   },
- });
+  const statusMutation = useMutation({
+    mutationFn: (newStatus: string) => updateTodo(id, {status: newStatus}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ["todo", id]});
+      queryClient.invalidateQueries({queryKey: ["todos"]});
+      toast.success("Status updated.");
+    },
+    onError: (err: unknown) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update status",
+      );
+    },
+  });
 
   async function handleEdit(values: TodoFormValues) {
     await updateMutation.mutateAsync(values);
   }
 
   function confirmDelete() {
-    setDeleteError(null);
     deleteMutation.mutate();
   }
 
@@ -185,7 +182,6 @@ export default function TodoDetailPage() {
               variant="outline"
               className="text-destructive hover:text-destructive"
               onClick={() => {
-                setDeleteError(null);
                 setDeleteOpen(true);
               }}
             >
@@ -353,7 +349,6 @@ export default function TodoDetailPage() {
           onOpenChange={(open: boolean) => {
             if (!open) {
               setDeleteOpen(false);
-              setDeleteError(null);
             }
           }}
         >
@@ -368,16 +363,8 @@ export default function TodoDetailPage() {
               </AlertDialogDescription>
             </AlertDialogHeader>
 
-            {deleteError && (
-              <p className="text-sm text-destructive bg-destructive/10 rounded px-3 py-2">
-                {deleteError}
-              </p>
-            )}
-
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setDeleteError(null)}>
-                Cancel
-              </AlertDialogCancel>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={(e: React.MouseEvent) => {

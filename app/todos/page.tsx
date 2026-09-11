@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import {useState} from "react";
 import Link from "next/link";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
 import {
   Loader2,
   ArrowUp,
@@ -23,10 +23,10 @@ import {
   deleteTodo,
   type TodoFormValues,
 } from "@/lib/api-client";
-import type { ITodo } from "@/lib/models/Todo";
+import type {ITodo} from "@/lib/models/Todo";
 
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import {Button} from "@/components/ui/button";
+import {Badge} from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -71,6 +71,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import TodoForm from "../components/TodoForm";
+import {toast} from "sonner";
 
 type SortableField = "dueDate" | "priority" | "status" | "name" | "createdAt";
 
@@ -106,7 +107,6 @@ export default function TodosPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTodo, setEditTodo] = useState<ITodo | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ITodo | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // --- Query: fetch todos, keyed on every param that affects the result ---
   const queryKey = [
@@ -123,7 +123,7 @@ export default function TodosPage() {
     },
   ];
 
-  const { data, isLoading, isFetching, error } = useQuery({
+  const {data, isLoading, isFetching, error} = useQuery({
     queryKey,
     queryFn: () =>
       getTodos({
@@ -146,21 +146,16 @@ export default function TodosPage() {
   const createMutation = useMutation({
     mutationFn: createTodo,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      queryClient.invalidateQueries({queryKey: ["todos"]});
       setCreateOpen(false);
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({
-      id,
-      values,
-    }: {
-      id: string;
-      values: Partial<TodoFormValues>;
-    }) => updateTodo(id, values),
+    mutationFn: ({id, values}: {id: string; values: Partial<TodoFormValues>}) =>
+      updateTodo(id, values),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      queryClient.invalidateQueries({queryKey: ["todos"]});
       setEditTodo(null);
     },
   });
@@ -168,14 +163,12 @@ export default function TodosPage() {
   const deleteMutation = useMutation({
     mutationFn: deleteTodo,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      queryClient.invalidateQueries({queryKey: ["todos"]});
       setDeleteTarget(null);
-      setDeleteError(null);
+      toast.success("Todo deleted.");
     },
     onError: (err: unknown) => {
-      setDeleteError(
-        err instanceof Error ? err.message : "Failed to delete todo",
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to delete todo");
     },
   });
 
@@ -185,11 +178,10 @@ export default function TodosPage() {
 
   async function handleEdit(values: TodoFormValues) {
     if (!editTodo) return;
-    await updateMutation.mutateAsync({ id: editTodo._id.toString(), values });
+    await updateMutation.mutateAsync({id: editTodo._id.toString(), values});
   }
 
   function openDeleteDialog(todo: ITodo) {
-    setDeleteError(null);
     setDeleteTarget(todo);
   }
 
@@ -240,7 +232,7 @@ export default function TodosPage() {
             <div className="flex gap-3 pt-2 flex-wrap">
               <Select
                 value={statusFilter}
-                onValueChange={(v) => {
+                onValueChange={(v: string) => {
                   if (v) {
                     setStatusFilter(v);
                     setPage(1);
@@ -268,7 +260,7 @@ export default function TodosPage() {
 
               <Select
                 value={priorityFilter}
-                onValueChange={(v) => {
+                onValueChange={(v: string) => {
                   if (v) {
                     setPriorityFilter(v);
                     setPage(1);
@@ -298,7 +290,7 @@ export default function TodosPage() {
 
               <Select
                 value={dueDateFilter}
-                onValueChange={(v) => {
+                onValueChange={(v: string) => {
                   if (v) {
                     setDueDateFilter(v);
                     setPage(1);
@@ -324,7 +316,7 @@ export default function TodosPage() {
 
               <Select
                 value={dependencyFilter}
-                onValueChange={(v) => {
+                onValueChange={(v: string) => {
                   if (v) {
                     setDependencyFilter(v);
                     setPage(1);
@@ -477,7 +469,7 @@ export default function TodosPage() {
           <CardFooter className="border-t justify-between items-center py-4">
             <Select
               value={String(limit)}
-              onValueChange={(v) => {
+              onValueChange={(v: string) => {
                 if (v) {
                   setLimit(Number(v));
                   setPage(1);
@@ -539,7 +531,7 @@ export default function TodosPage() {
         {/* Edit modal */}
         <Dialog
           open={!!editTodo}
-          onOpenChange={(open) => !open && setEditTodo(null)}
+          onOpenChange={(open: boolean) => !open && setEditTodo(null)}
         >
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -570,10 +562,9 @@ export default function TodosPage() {
         {/* Delete confirmation */}
         <AlertDialog
           open={!!deleteTarget}
-          onOpenChange={(open) => {
+          onOpenChange={(open: boolean) => {
             if (!open) {
               setDeleteTarget(null);
-              setDeleteError(null);
             }
           }}
         >
@@ -588,19 +579,11 @@ export default function TodosPage() {
               </AlertDialogDescription>
             </AlertDialogHeader>
 
-            {deleteError && (
-              <p className="text-sm text-destructive bg-destructive/10 rounded px-3 py-2">
-                {deleteError}
-              </p>
-            )}
-
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setDeleteError(null)}>
-                Cancel
-              </AlertDialogCancel>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={(e) => {
+                onClick={(e: React.MouseEvent) => {
                   e.preventDefault();
                   confirmDelete();
                 }}
