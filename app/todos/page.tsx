@@ -232,7 +232,7 @@ export default function TodosPage() {
             <div className="flex gap-3 pt-2 flex-wrap">
               <Select
                 value={statusFilter}
-                onValueChange={(v: string) => {
+                onValueChange={(v: string | null) => {
                   if (v) {
                     setStatusFilter(v);
                     setPage(1);
@@ -260,7 +260,7 @@ export default function TodosPage() {
 
               <Select
                 value={priorityFilter}
-                onValueChange={(v: string) => {
+                onValueChange={(v: string | null) => {
                   if (v) {
                     setPriorityFilter(v);
                     setPage(1);
@@ -290,7 +290,7 @@ export default function TodosPage() {
 
               <Select
                 value={dueDateFilter}
-                onValueChange={(v: string) => {
+                onValueChange={(v: string | null) => {
                   if (v) {
                     setDueDateFilter(v);
                     setPage(1);
@@ -316,7 +316,7 @@ export default function TodosPage() {
 
               <Select
                 value={dependencyFilter}
-                onValueChange={(v: string) => {
+                onValueChange={(v: string | null) => {
                   if (v) {
                     setDependencyFilter(v);
                     setPage(1);
@@ -469,7 +469,7 @@ export default function TodosPage() {
           <CardFooter className="border-t justify-between items-center py-4">
             <Select
               value={String(limit)}
-              onValueChange={(v: string) => {
+              onValueChange={(v: string | null) => {
                 if (v) {
                   setLimit(Number(v));
                   setPage(1);
