@@ -60,14 +60,18 @@ export default function TodoDetailPage() {
 
   const todo = data?.data;
 
-  const updateMutation = useMutation({
-    mutationFn: (values: Partial<TodoFormValues>) => updateTodo(id, values),
-    onSuccess: () => {
-      queryClient.invalidateQueries({queryKey: ["todo", id]});
-      queryClient.invalidateQueries({queryKey: ["todos"]}); // list page cache, in case it's revisited
-      setEditOpen(false);
-    },
-  });
+ const updateMutation = useMutation({
+   mutationFn: (values: Partial<TodoFormValues>) => updateTodo(id, values),
+   onSuccess: () => {
+     queryClient.invalidateQueries({queryKey: ["todo", id]});
+     queryClient.invalidateQueries({queryKey: ["todos"]});
+     setEditOpen(false);
+     toast.success("Todo updated.");
+   },
+   onError: (err: unknown) => {
+     toast.error(err instanceof Error ? err.message : "Failed to update todo");
+   },
+ });
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteTodo(id),

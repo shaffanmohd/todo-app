@@ -142,24 +142,30 @@ export default function TodosPage() {
   const todos = data?.data ?? [];
   const totalPages = data?.pagination.totalPages ?? 1;
 
-  // --- Mutations: create, update, delete ---
-  const createMutation = useMutation({
-    mutationFn: createTodo,
-    onSuccess: () => {
-      queryClient.invalidateQueries({queryKey: ["todos"]});
-      setCreateOpen(false);
-    },
-  });
+ const createMutation = useMutation({
+   mutationFn: createTodo,
+   onSuccess: () => {
+     queryClient.invalidateQueries({queryKey: ["todos"]});
+     setCreateOpen(false);
+     toast.success("Todo created.");
+   },
+   onError: (err: unknown) => {
+     toast.error(err instanceof Error ? err.message : "Failed to create todo");
+   },
+ });
 
-  const updateMutation = useMutation({
-    mutationFn: ({id, values}: {id: string; values: Partial<TodoFormValues>}) =>
-      updateTodo(id, values),
-    onSuccess: () => {
-      queryClient.invalidateQueries({queryKey: ["todos"]});
-      setEditTodo(null);
-    },
-  });
-
+ const updateMutation = useMutation({
+   mutationFn: ({id, values}: {id: string; values: Partial<TodoFormValues>}) =>
+     updateTodo(id, values),
+   onSuccess: () => {
+     queryClient.invalidateQueries({queryKey: ["todos"]});
+     setEditTodo(null);
+     toast.success("Todo updated.");
+   },
+   onError: (err: unknown) => {
+     toast.error(err instanceof Error ? err.message : "Failed to update todo");
+   },
+ });
   const deleteMutation = useMutation({
     mutationFn: deleteTodo,
     onSuccess: () => {
