@@ -1,23 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import {useState} from "react";
+import {useRouter, useParams} from "next/navigation";
 import Link from "next/link";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
-import { STATUS_STYLES, PRIORITY_BAR_COLORS } from "@/lib/constants";
+import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
+import {ArrowLeft, Loader2, CheckCircle2} from "lucide-react";
+import {STATUS_STYLES, PRIORITY_BAR_COLORS, TODO_STATUS} from "@/lib/constants";
 import {
   getTodo,
   updateTodo,
   deleteTodo,
-  completeTodo,
   type TodoFormValues,
   PopulatedTodoRef,
 } from "@/lib/api-client";
 
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {Button} from "@/components/ui/button";
+import {Badge} from "@/components/ui/badge";
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -35,19 +34,26 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import TodoForm from "@/app/components/TodoForm";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {toast} from "sonner";
 
 export default function TodoDetailPage() {
   const router = useRouter();
-  const params = useParams<{ id: string }>();
+  const params = useParams<{id: string}>();
   const id = params.id;
   const queryClient = useQueryClient();
 
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [completeMessage, setCompleteMessage] = useState<string | null>(null);
 
-  const { data, isLoading, isFetching, error } = useQuery({
+  const {data, isLoading, isFetching, error} = useQuery({
     queryKey: ["todo", id],
     queryFn: () => getTodo(id),
     enabled: !!id,
@@ -58,8 +64,8 @@ export default function TodoDetailPage() {
   const updateMutation = useMutation({
     mutationFn: (values: Partial<TodoFormValues>) => updateTodo(id, values),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todo", id] });
-      queryClient.invalidateQueries({ queryKey: ["todos"] }); // list page cache, in case it's revisited
+      queryClient.invalidateQueries({queryKey: ["todo", id]});
+      queryClient.invalidateQueries({queryKey: ["todos"]}); // list page cache, in case it's revisited
       setEditOpen(false);
     },
   });
@@ -67,7 +73,7 @@ export default function TodoDetailPage() {
   const deleteMutation = useMutation({
     mutationFn: () => deleteTodo(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
+      queryClient.invalidateQueries({queryKey: ["todos"]});
       router.push("/todos");
     },
     onError: (err: unknown) => {
@@ -77,22 +83,19 @@ export default function TodoDetailPage() {
     },
   });
 
-  const completeMutation = useMutation({
-    mutationFn: () => completeTodo(id),
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ["todo", id] });
-      queryClient.invalidateQueries({ queryKey: ["todos"] });
-      setCompleteMessage(
-        res.data.nextOccurrence
-          ? `Completed. Next occurrence created, due ${
-              res.data.nextOccurrence.dueDate
-                ? new Date(res.data.nextOccurrence.dueDate).toLocaleDateString()
-                : "soon"
-            }.`
-          : "Marked as completed.",
-      );
-    },
-  });
+ const statusMutation = useMutation({
+   mutationFn: (newStatus: string) => updateTodo(id, {status: newStatus}),
+   onSuccess: () => {
+     queryClient.invalidateQueries({queryKey: ["todo", id]});
+     queryClient.invalidateQueries({queryKey: ["todos"]});
+     toast.success("Status updated.");
+   },
+   onError: (err: unknown) => {
+     toast.error(
+       err instanceof Error ? err.message : "Failed to update status",
+     );
+   },
+ });
 
   async function handleEdit(values: TodoFormValues) {
     await updateMutation.mutateAsync(values);
@@ -151,7 +154,30 @@ export default function TodoDetailPage() {
               )}
             </h1>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <Select
+              value={todo.status}
+              onValueChange={(v: string) => {
+                if (v) statusMutation.mutate(v);
+              }}
+              disabled={statusMutation.isPending}
+            >
+              <SelectTrigger className="w-44 rounded-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TODO_STATUS.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    <span className="flex items-center gap-2">
+                      <Badge className={STATUS_STYLES[s]} variant="secondary">
+                        {s}
+                      </Badge>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               Edit
             </Button>
@@ -165,23 +191,8 @@ export default function TodoDetailPage() {
             >
               Delete
             </Button>
-            {canComplete && (
-              <Button
-                onClick={() => completeMutation.mutate()}
-                disabled={completeMutation.isPending}
-              >
-                {completeMutation.isPending ? "Completing..." : "Complete"}
-              </Button>
-            )}
           </div>
         </div>
-
-        {completeMessage && (
-          <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2">
-            <CheckCircle2 className="h-4 w-4" />
-            {completeMessage}
-          </div>
-        )}
 
         {/* Main details card */}
         <Card>
@@ -339,7 +350,7 @@ export default function TodoDetailPage() {
         {/* Delete confirmation */}
         <AlertDialog
           open={deleteOpen}
-          onOpenChange={(open) => {
+          onOpenChange={(open: boolean) => {
             if (!open) {
               setDeleteOpen(false);
               setDeleteError(null);
@@ -369,7 +380,7 @@ export default function TodoDetailPage() {
               </AlertDialogCancel>
               <AlertDialogAction
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={(e) => {
+                onClick={(e: React.MouseEvent) => {
                   e.preventDefault();
                   confirmDelete();
                 }}

@@ -23,38 +23,21 @@ export interface TodoInput {
   };
 }
 
-// Shared checks that apply whenever a given field IS present,
-// regardless of whether it's a create or an update.
+
 function validateProvidedFields(input: TodoInput): string[] {
   const errors: string[] = [];
 
-  if (
-    input.status !== undefined &&
-    !TODO_STATUS.includes(input.status as TodoStatus)
-  ) {
+  if (input.status !== undefined && !TODO_STATUS.includes(input.status as TodoStatus)) {
     errors.push(`status must be one of: ${TODO_STATUS.join(", ")}`);
   }
-
-  if (
-    input.priority !== undefined &&
-    !TODO_PRIORITY.includes(input.priority as TodoPriority)
-  ) {
+  if (input.priority !== undefined && !TODO_PRIORITY.includes(input.priority as TodoPriority)) {
     errors.push(`priority must be one of: ${TODO_PRIORITY.join(", ")}`);
   }
-
   if (input.dueDate !== undefined) {
     if (typeof input.dueDate !== "string" || isNaN(Date.parse(input.dueDate))) {
       errors.push("dueDate must be a valid date string");
-    } else {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const parsedDate = new Date(input.dueDate);
-      if (parsedDate < today) {
-        errors.push("dueDate cannot be in the past");
-      }
     }
   }
-
   if (input.dependsOn !== undefined) {
     if (!Array.isArray(input.dependsOn)) {
       errors.push("dependsOn must be an array of todo IDs");
@@ -66,23 +49,15 @@ function validateProvidedFields(input: TodoInput): string[] {
       }
     }
   }
-
   if (input.recurrence?.frequency !== undefined) {
-    if (
-      !RECURRENCE_FREQUENCY.includes(
-        input.recurrence.frequency as RecurrenceFrequency,
-      )
-    ) {
-      errors.push(
-        `recurrence.frequency must be one of: ${RECURRENCE_FREQUENCY.join(", ")}`,
-      );
+    if (!RECURRENCE_FREQUENCY.includes(input.recurrence.frequency as RecurrenceFrequency)) {
+      errors.push(`recurrence.frequency must be one of: ${RECURRENCE_FREQUENCY.join(", ")}`);
     }
   }
 
   return errors;
 }
 
-// Used by POST — name is required.
 export function validateTodoCreate(body: unknown): string[] {
   if (typeof body !== "object" || body === null) {
     return ["Request body must be a JSON object"];
@@ -94,10 +69,19 @@ export function validateTodoCreate(body: unknown): string[] {
     errors.push("name is required and must be a non-empty string");
   }
 
+  // Past-date check only applies to creation.
+  if (input.dueDate !== undefined && typeof input.dueDate === "string" && !isNaN(Date.parse(input.dueDate))) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const parsedDate = new Date(input.dueDate);
+    if (parsedDate < today) {
+      errors.push("dueDate cannot be in the past");
+    }
+  }
+
   return [...errors, ...validateProvidedFields(input)];
 }
 
-// Used by PATCH — every field optional, but name (if provided) can't be blank.
 export function validateTodoUpdate(body: unknown): string[] {
   if (typeof body !== "object" || body === null) {
     return ["Request body must be a JSON object"];
@@ -105,12 +89,10 @@ export function validateTodoUpdate(body: unknown): string[] {
   const input = body as TodoInput;
   const errors: string[] = [];
 
-  if (
-    input.name !== undefined &&
-    (typeof input.name !== "string" || !input.name.trim())
-  ) {
+  if (input.name !== undefined && (typeof input.name !== "string" || !input.name.trim())) {
     errors.push("name must be a non-empty string");
   }
 
+  // No past-date restriction on update — an overdue task should remain editable.
   return [...errors, ...validateProvidedFields(input)];
 }

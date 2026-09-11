@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {useEffect, useRef, useState} from "react";
 import {
   TODO_STATUS,
   TODO_PRIORITY,
@@ -8,13 +8,13 @@ import {
   STATUS_STYLES,
   PRIORITY_BAR_COLORS,
 } from "@/lib/constants";
-import { getTodos, type TodoFormValues } from "@/lib/api-client";
+import {getTodos, type TodoFormValues} from "@/lib/api-client";
 
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button";
+import {Input} from "@/components/ui/input";
+import {Textarea} from "@/components/ui/textarea";
+import {Label} from "@/components/ui/label";
+import {Checkbox} from "@/components/ui/checkbox";
+import {Button} from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
+import {Badge} from "@/components/ui/badge";
 
 interface TodoOption {
   _id: string;
@@ -68,11 +68,11 @@ export default function TodoForm({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getTodos({ limit: 500 })
+    getTodos({limit: 500})
       .then((res) => {
         const options = res.data
           .filter((t) => t._id.toString() !== currentTodoId)
-          .map((t) => ({ _id: t._id.toString(), name: t.name }));
+          .map((t) => ({_id: t._id.toString(), name: t.name}));
         setTodoOptions(options);
       })
       .catch(() => setError("Failed to load dependency options"));
@@ -93,7 +93,7 @@ export default function TodoForm({
       return;
     }
 
-    if (dueDate) {
+    if (dueDate && !currentTodoId) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const selectedDate = new Date(dueDate);
@@ -133,10 +133,21 @@ export default function TodoForm({
       setSubmitting(false);
     }
   }
+
+  const errorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (error) {
+      errorRef.current?.scrollIntoView({behavior: "smooth", block: "start"});
+    }
+  }, [error]);
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="rounded bg-red-50 border border-red-200 text-red-700 text-sm p-2">
+        <div
+          ref={errorRef}
+          className="rounded bg-red-50 border border-red-200 text-red-700 text-sm p-2"
+        >
           {error}
         </div>
       )}
@@ -167,7 +178,9 @@ export default function TodoForm({
           <Input
             id="dueDate"
             type="date"
-            min={new Date().toISOString().slice(0, 10)}
+            min={
+              !currentTodoId ? new Date().toISOString().slice(0, 10) : undefined
+            }
             value={dueDate ? dueDate.slice(0, 10) : ""}
             onChange={(e) => setDueDate(e.target.value)}
           />
