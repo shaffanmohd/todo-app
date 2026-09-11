@@ -154,7 +154,7 @@ export default function TodoDetailPage() {
           <div className="flex gap-2 items-center">
             <Select
               value={todo.status}
-              onValueChange={(v: string) => {
+              onValueChange={(v: string|null) => {
                 if (v) statusMutation.mutate(v);
               }}
               disabled={statusMutation.isPending}
