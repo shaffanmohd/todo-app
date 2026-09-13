@@ -3,6 +3,7 @@ import {Inter} from "next/font/google";
 import "./globals.css";
 import QueryProvider from "@/providers/query-provider";
 import {Toaster} from "@/components/ui/sonner";
+import SessionProvider from "@/providers/session-provider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -19,10 +20,12 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en" className={inter.variable}>
       <body className="antialiased">
-        <QueryProvider>
-          {children}
-          <Toaster />
-        </QueryProvider>
+        <SessionProvider>
+          <QueryProvider>
+            {children}
+            <Toaster />
+          </QueryProvider>
+        </SessionProvider>
       </body>
     </html>
   );
