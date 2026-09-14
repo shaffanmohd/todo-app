@@ -4,6 +4,7 @@ import "./globals.css";
 import QueryProvider from "@/providers/query-provider";
 import {Toaster} from "@/components/ui/sonner";
 import SessionProvider from "@/providers/session-provider";
+import Navbar from "./components/Navbar";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -22,6 +23,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
       <body className="antialiased">
         <SessionProvider>
           <QueryProvider>
+            <Navbar />
             {children}
             <Toaster />
           </QueryProvider>

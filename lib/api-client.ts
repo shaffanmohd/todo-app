@@ -1,5 +1,5 @@
-import type { ITodo } from "@/lib/models/Todo";
-import { TodoPriority, TodoStatus } from "./constants";
+import type {ITodo} from "@/lib/models/Todo";
+import {TodoPriority, TodoStatus} from "./constants";
 
 const BASE_URL = "/api/todos";
 
@@ -81,15 +81,15 @@ export interface TodoFormValues {
   status?: string;
   priority?: string;
   dependsOn?: string[];
-  recurrence?: { frequency: string; intervalDays?: number };
+  recurrence?: {frequency: string; intervalDays?: number};
 }
 
 export async function createTodo(
   values: TodoFormValues,
-): Promise<{ data: ITodo }> {
+): Promise<{data: ITodo}> {
   const res = await fetch(BASE_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {"Content-Type": "application/json"},
     body: JSON.stringify(values),
   });
   return handleResponse(res);
@@ -98,10 +98,10 @@ export async function createTodo(
 export async function updateTodo(
   id: string,
   values: Partial<TodoFormValues>,
-): Promise<{ data: ITodo }> {
+): Promise<{data: ITodo}> {
   const res = await fetch(`${BASE_URL}/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: {"Content-Type": "application/json"},
     body: JSON.stringify(values),
   });
   return handleResponse(res);
@@ -109,14 +109,49 @@ export async function updateTodo(
 
 export async function deleteTodo(
   id: string,
-): Promise<{ data: { message: string } }> {
-  const res = await fetch(`${BASE_URL}/${id}`, { method: "DELETE" });
+): Promise<{data: {message: string}}> {
+  const res = await fetch(`${BASE_URL}/${id}`, {method: "DELETE"});
   return handleResponse(res);
 }
 
 export async function completeTodo(
   id: string,
-): Promise<{ data: { completed: ITodo; nextOccurrence: ITodo | null } }> {
-  const res = await fetch(`${BASE_URL}/${id}/complete`, { method: "POST" });
+): Promise<{data: {completed: ITodo; nextOccurrence: ITodo | null}}> {
+  const res = await fetch(`${BASE_URL}/${id}/complete`, {method: "POST"});
+  return handleResponse(res);
+}
+
+export interface AdminUser {
+  _id: string;
+  email: string;
+  role: "user" | "superadmin";
+  createdAt: string;
+}
+
+export interface AdminUsersResponse {
+  data: AdminUser[];
+}
+
+export async function getUsers(): Promise<AdminUsersResponse> {
+  const res = await fetch("/api/admin/users");
+  return handleResponse<AdminUsersResponse>(res);
+}
+
+export async function updateUserRole(
+  id: string,
+  role: string,
+): Promise<{data: AdminUser}> {
+  const res = await fetch(`/api/admin/users/${id}`, {
+    method: "PATCH",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({role}),
+  });
+  return handleResponse(res);
+}
+
+export async function deleteUser(
+  id: string,
+): Promise<{data: {message: string}}> {
+  const res = await fetch(`/api/admin/users/${id}`, {method: "DELETE"});
   return handleResponse(res);
 }
