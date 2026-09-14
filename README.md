@@ -154,6 +154,20 @@ sequenceDiagram
         FE-->>User: Render list (TanStack Query cache)
     end
 
+    User->>FE: Create a new todo
+    FE->>API: POST /api/todos { name, dependsOn, ... }
+    API->>Auth: getCurrentUser()
+    API->>DB: Confirm dependsOn IDs exist AND belong to this user
+    alt Any dependency missing or owned by another user
+        API-->>FE: 400 error
+        FE-->>User: Toast: invalid dependency
+    else All dependencies valid
+        API->>DB: Todo.create({ ...fields, userId })
+        DB-->>API: new todo
+        API-->>FE: 201 created todo
+        FE-->>User: Toast: todo created, list updates
+    end
+
     User->>FE: Change status to "In Progress"
     FE->>API: PATCH /api/todos/:id { status }
     API->>DB: Check dependsOn — all Completed?
@@ -167,10 +181,55 @@ sequenceDiagram
     end
 ```
 
+**Superadmin user-management flow:**
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as Superadmin
+    participant FE as Next.js Frontend (/admin/users)
+    participant API as /api/admin/users routes
+    participant DB as MongoDB (Mongoose)
+
+    Admin->>FE: Visit /admin/users
+    FE->>FE: Check session.user.role === "superadmin"
+    alt Not a superadmin
+        FE-->>Admin: "You don't have permission" (client-side gate)
+    else Is a superadmin
+        FE->>API: GET /api/admin/users
+        API->>API: getCurrentUser() + role check (403 if not superadmin)
+        API->>DB: User.find({})
+        DB-->>API: users[]
+        API-->>FE: { data: users }
+        FE-->>Admin: Render user table
+
+        Admin->>FE: Change another user's role
+        FE->>API: PATCH /api/admin/users/:id { role }
+        API->>API: Reject if :id === own id (400)
+        API->>DB: User.findByIdAndUpdate(id, { role })
+        DB-->>API: updated user
+        API-->>FE: 200 updated user
+        FE-->>Admin: Toast: role updated
+
+        Admin->>FE: Delete a user
+        FE->>API: DELETE /api/admin/users/:id
+        API->>API: Reject if :id === own id (400)
+        API->>DB: Todo.countDocuments({ userId: id, deletedAt: null })
+        alt User still owns active todos
+            API-->>FE: 409 error
+            FE-->>Admin: Toast: cannot delete, dialog stays open
+        else No active todos
+            API->>DB: User.findByIdAndDelete(id)
+            API-->>FE: 200 deleted
+            FE-->>Admin: Toast: user deleted
+        end
+    end
+```
+
 ### 2.6 AI Usage Disclosure
 
 - This project was built with assistance from Claude (Anthropic), used as a planning and pair-programming assistant throughout.
-- Scope decisions, prioritization (core features before nice-to-haves), and interpretation of ambiguous requirements were made by me, based on the assignment brief and my own judgment — including the calls to defer full recurrence chaining, keep the list endpoint lean, and block  deletions that have dependents for superadmin.
+- Scope decisions, prioritization (core features before nice-to-haves), and interpretation of ambiguous requirements were made by me, based on the assignment brief and my own judgment — including the calls to defer full recurrence chaining, keep the list endpoint lean, and block deletions that have dependents for superadmin.
 
 ### 2.7 Features
 
@@ -194,7 +253,7 @@ This section is the project's decision log, covering ambiguous requirements, arc
 
 - _"A dependent task cannot be moved to In Progress until dependencies are Completed"_ — the spec only names "In Progress," but we extended the same rule to "Completed," reasoning that a task shouldn't be markable as done before its prerequisites are. "Archived" is left unrestricted, since archiving represents shelving/cancelling a task rather than finishing it.
 - Past-due-date validation applies only at **creation**, not on edit — an already-overdue task must remain fully editable (including being marked complete), or normal use of the app would break the moment a due date passes.
--  Recurring todo that also has dependents raises the question of whether new occurrences should be linked together across the whole chain and is genuinely complex (see below), so recurrence and dependencies are kept as 2 separated features.
+- Recurring todo that also has dependents raises the question of whether new occurrences should be linked together across the whole chain and is genuinely complex (see below), so recurrence and dependencies are kept as 2 separated features.
 - `dependsOn` is stored one-directional (only the "depends on" side). The reverse relationship ("what depends on me") is computed via query when needed (on the detail page, and for the delete-guard), rather than stored on both sides — this avoids the two references ever falling out of sync with each other.
 
 **Architectural decisions**

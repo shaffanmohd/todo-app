@@ -261,7 +261,8 @@ export default function TodoForm({
       </div>
 
       <div className="space-y-1">
-        <Label>Recurrence</Label>
+        {/* remove reccurence for now  */}
+        {/* <Label>Recurrence</Label>
         <Select
           value={recurrenceFrequency}
           onValueChange={(v) =>
@@ -279,12 +280,12 @@ export default function TodoForm({
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
-        {dependsOn.length > 0 && (
+        </Select> */}
+        {/* {dependsOn.length > 0 && (
           <p className="text-xs text-muted-foreground">
             Recurrence is disabled for todos with dependencies.
           </p>
-        )}
+        )} */}
 
         {recurrenceFrequency === "custom" && (
           <div className="pt-2 space-y-1">
