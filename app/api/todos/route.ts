@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
-import { connectDb } from "@/lib/db";
-import { ITodo, Todo } from "@/lib/models/Todo";
-import { validateTodoCreate, type TodoInput } from "@/lib/validation";
-import { TODO_PRIORITY, TODO_STATUS } from "@/lib/constants";
+import {NextRequest, NextResponse} from "next/server";
+import {connectDb} from "@/lib/db";
+import {ITodo, Todo} from "@/lib/models/Todo";
+import {validateTodoCreate, type TodoInput} from "@/lib/validation";
+import {TODO_PRIORITY, TODO_STATUS} from "@/lib/constants";
+import {getCurrentUser} from "@/lib/session";
 
 const VALID_SORT_FIELDS = [
   "dueDate",
@@ -18,9 +19,14 @@ function isSortField(value: string): value is SortField {
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({error: "Unauthorized"}, {status: 401});
+  }
+
   await connectDb();
 
-  const { searchParams } = new URL(req.url);
+  const {searchParams} = new URL(req.url);
   const statusParam = searchParams.get("status");
   const priorityParam = searchParams.get("priority");
   const dueDateParam = searchParams.get("dueDateStatus");
@@ -31,9 +37,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const rawLimit = parseInt(searchParams.get("limit") ?? "50", 10);
   const limit = Math.min(Math.max(rawLimit, 1), 100);
 
-  // Build as a plain, loosely-typed Mongo filter object since we may need
-  // $or, which doesn't fit cleanly into a narrow TodoFilter interface.
-  const filter: Record<string, unknown> = { deletedAt: null };
+  // Every query is scoped to the current user
+  const filter: Record<string, unknown> = {userId: user.id, deletedAt: null};
 
   if (statusParam && (TODO_STATUS as readonly string[]).includes(statusParam)) {
     filter.status = statusParam;
@@ -45,27 +50,27 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     filter.priority = priorityParam;
   }
   if (dependencyParam === "none") {
-    filter.dependsOn = { $size: 0 };
+    filter.dependsOn = {$size: 0};
   }
 
   if (dueDateParam === "overdue") {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
-    filter.dueDate = { $lt: startOfToday };
+    filter.dueDate = {$lt: startOfToday};
   } else if (dueDateParam === "upcoming") {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     filter.$or = [
-      { dueDate: { $gte: startOfToday } },
-      { dueDate: { $exists: false } },
-      { dueDate: null },
+      {dueDate: {$gte: startOfToday}},
+      {dueDate: {$exists: false}},
+      {dueDate: null},
     ];
   }
 
   const sortField: SortField = isSortField(sortParam) ? sortParam : "createdAt";
 
   const todos = await Todo.find(filter)
-    .sort({ [sortField]: order })
+    .sort({[sortField]: order})
     .skip((page - 1) * limit)
     .limit(limit)
     .lean();
@@ -74,45 +79,53 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json({
     data: todos,
-    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    pagination: {page, limit, total, totalPages: Math.ceil(total / limit)},
   });
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({error: "Unauthorized"}, {status: 401});
+  }
   await connectDb();
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    return NextResponse.json({error: "Invalid JSON body"}, {status: 400});
   }
 
   const errors = validateTodoCreate(body);
   if (errors.length > 0) {
     return NextResponse.json(
-      { error: "Validation failed", details: errors },
-      { status: 400 },
+      {error: "Validation failed", details: errors},
+      {status: 400},
     );
   }
 
   const input = body as TodoInput;
   const dependsOn = (input.dependsOn as string[] | undefined) ?? [];
 
-  // Check if all dependsOn IDs exist in the database
+  // Dependencies must also belong to the current user — you can't depend
+  // on someone else's task, and this also prevents leaking the existence
+  // of other users' todo IDs.
   if (dependsOn.length > 0) {
     const existingCount = await Todo.countDocuments({
-      _id: { $in: dependsOn },
+      _id: {$in: dependsOn},
+      userId: user.id,
     });
     if (existingCount !== dependsOn.length) {
       return NextResponse.json(
-        { error: "One or more dependsOn IDs do not exist" },
-        { status: 400 },
+        {error: "One or more dependsOn IDs do not exist"},
+        {status: 400},
       );
     }
   }
 
   const todoData: Partial<ITodo> = {
+    userId: user.id as unknown as ITodo["userId"],
     name: input.name as string,
     description: (input.description as string | undefined) ?? "",
     dueDate: input.dueDate ? new Date(input.dueDate as string) : undefined,
@@ -121,15 +134,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     dependsOn: dependsOn as unknown as ITodo["dependsOn"],
     recurrence: input.recurrence as ITodo["recurrence"] | undefined,
   };
-
   try {
     const todo = await Todo.create(todoData);
-    return NextResponse.json({ data: todo }, { status: 201 });
+    return NextResponse.json({data: todo}, {status: 201});
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(
-      { error: "Failed to create todo", details: message },
-      { status: 500 },
+      {error: "Failed to create todo", details: message},
+      {status: 500},
     );
   }
 }

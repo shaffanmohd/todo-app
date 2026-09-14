@@ -1,16 +1,14 @@
-import { Todo } from "@/lib/models/Todo";
+import {Todo, type ITodo} from "@/lib/models/Todo";
 
 /**
  * Checks whether setting `dependsOn` on the todo identified by `todoId`
- * would create a circular dependency chain.
- *
- * Only meaningful when `todoId` refers to an existing todo (i.e. during
- * updates) — a brand-new todo can't be part of a cycle since nothing
- * can reference an ID that doesn't exist yet.
+ * would create a circular dependency chain. Scoped to `userId` since a
+ * todo can only ever depend on the same user's own todos.
  */
 export async function wouldCreateCycle(
   todoId: string,
   dependsOn: string[],
+  userId: string,
 ): Promise<boolean> {
   const visited = new Set<string>();
   const queue: string[] = [...dependsOn];
@@ -21,9 +19,9 @@ export async function wouldCreateCycle(
     if (visited.has(currentId)) continue;
     visited.add(currentId);
 
-    const current = await Todo.findById(currentId)
+    const current = await Todo.findOne({_id: currentId, userId})
       .select("dependsOn")
-      .lean<{ dependsOn: { toString(): string }[] } | null>();
+      .lean<Pick<ITodo, "dependsOn"> | null>();
 
     if (current?.dependsOn) {
       queue.push(...current.dependsOn.map((id) => id.toString()));
@@ -35,16 +33,18 @@ export async function wouldCreateCycle(
 
 /**
  * Given a list of dependency todo IDs, returns true if all of them
- * currently have status "Completed". Used to gate the "In Progress" transition.
+ * currently have status "Completed". Scoped to userId for the same reason.
  */
 export async function areAllDependenciesCompleted(
   dependsOn: string[],
+  userId: string,
 ): Promise<boolean> {
   if (dependsOn.length === 0) return true;
 
   const incomplete = await Todo.countDocuments({
-    _id: { $in: dependsOn },
-    status: { $ne: "Completed" },
+    _id: {$in: dependsOn},
+    userId,
+    status: {$ne: "Completed"},
   });
 
   return incomplete === 0;
